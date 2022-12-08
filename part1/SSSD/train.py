@@ -178,7 +178,7 @@ def train(output_directory,
 
             # save checkpoint
             if n_iter > 0 and n_iter % iters_per_ckpt == 0:
-                net.write(output_directory +'./{}/{}.ckpt'.format(n_iter, n_iter),optimizer)
+                net.write(output_directory +'/{}/{}.ckpt'.format(n_iter, n_iter),optimizer)
                 print('model at iteration %s is saved' % n_iter)
 
             n_iter += 1
