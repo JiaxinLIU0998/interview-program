@@ -168,10 +168,8 @@ def train(output_directory,
     iterator = iter(dataset)
     while n_iter < n_iters + 1:
         try:
-            t1 = time.time()
             X,y = next(iterator) #X: (batch, batch, mask, loss mask(bool))
             loss = train_step(X,y,net,tf.keras.losses.MeanSquaredError(),optimizer)
-            print(time.time()-t1)
 
             if n_iter % iters_per_logging == 0:
                 print("iteration: {} \tloss: {}".format(n_iter, loss))
