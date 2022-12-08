@@ -210,7 +210,7 @@ class SSSDS4Imputer(tf.Module):
         Args:
             inputs: tuple (x, conditional, mask, diffusion_steps)
                     x: noised input [B,K,L]
-                    conditional: conditioning information [B,2*K,L]
+                    conditional: conditioning information [B,K,L]
                     mask: [B,K,L]
                     diffusion_steps: [B, 1]
         Returns:
