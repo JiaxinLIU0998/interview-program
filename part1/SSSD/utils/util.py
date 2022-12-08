@@ -29,13 +29,10 @@ def find_max_epoch(path):
     files = os.listdir(path)
     epoch = -1
     for f in files:
-        if len(f) <= 4:
+        try:
+            epoch = max(epoch, int(f))
+        except:
             continue
-        if f[-4:] == '.pkl':
-            try:
-                epoch = max(epoch, int(f[:-4]))
-            except:
-                continue
     return epoch
 
 
@@ -145,7 +142,7 @@ def sampling(net, size, diffusion_hyperparams, cond, mask, only_generate_missing
 
         epsilon_theta = net((tf.convert_to_tensor(x), tf.convert_to_tensor(cond), tf.convert_to_tensor(mask), tf.convert_to_tensor(diffusion_steps,)))  # predict \epsilon according to \epsilon_\theta
         # update x_{t-1} to \mu_\theta(x_t)
-        x = (x - (1 - Alpha[t]) / np.sqrt(1 - Alpha_bar[t]) * epsilon_theta.numpy) / np.sqrt(Alpha[t])
+        x = (x - (1 - Alpha[t]) / np.sqrt(1 - Alpha_bar[t]) * epsilon_theta.numpy()) / np.sqrt(Alpha[t])
         if t > 0:
             x = x + Sigma[t] * std_normal(size)  # add the variance term to x_{t-1}
 
