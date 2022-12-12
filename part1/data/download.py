@@ -68,7 +68,7 @@ def process(index_name):
             df_add = pd.DataFrame({'Date':[i.strftime('%Y-%m-%d')],'Open':[np.nan],'High':[np.nan],'Low':[np.nan],'Close':[np.nan],'Adj Close':[np.nan],'Volume':[np.nan],'ticker':[ticker],'datetime':[i]})
             INDEX_data = insert(INDEX_data, index+1, df_add)
             count += 1
-        print('number of holiday days for '+ str(ticker) + ' in ' + str(ind)+ ' index : ' + str(len(holiday_INDEX)))                
+        print('number of holiday days for '+ str(ticker) + ' in ' + str(index_name)+ ' index : ' + str(len(holiday_INDEX)))                
         assert len(holiday_INDEX) == count
     INDEX_data.to_csv('./'+ str(index_name) +'_data_withmissing'+'.csv')
     
