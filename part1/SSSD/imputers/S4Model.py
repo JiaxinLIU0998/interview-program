@@ -1,22 +1,16 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import random
 import pickle
 import math
 import os
-os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
-import wandb
 import logging
 from functools import partial
 from scipy import special as ss
 from einops import rearrange, repeat
 import opt_einsum as oe
-
 import tensorflow as tf
-tf.config.run_functions_eagerly(True)
 import tensorflow_probability as tfp
-import time
-
 
 contract = oe.contract
 contract_expression = oe.contract_expression
@@ -52,14 +46,14 @@ _resolve_conj = lambda x: tf.math.conj(x)
 
 """ simple components """
 
-class GLU(tf.Module):
+class GLU(tf.keras.layers.Layer):
     """implementation of GLU activation function in tensorflow"""
     def __init__(self,dim=-1):
         super(GLU, self).__init__()
         self.dim = dim
-    @tf.Module.with_name_scope
-    def __call__(self, x):
-        nc = x.get_shape().as_list()[self.dim]
+        
+    def call(self, x):
+        nc = x.shape[self.dim]
         assert nc % 2 == 0, 'channels dont divide 2!'
         return tf.gather(x, indices=[i for i in range(int(nc/2))], axis=self.dim) * tf.sigmoid(tf.gather(x, indices=[i for i in range(int(nc/2),nc)], axis=self.dim))
 
@@ -114,7 +108,7 @@ def get_initializer(name, activation=None):
 
 
 
-class TransposedLinear(tf.Module):
+class TransposedLinear(tf.keras.layers.Layer):
     """ Linear module on the second-to-last dimension """
 
     def __init__(self, d_input, d_output, bias=True):
@@ -129,9 +123,8 @@ class TransposedLinear(tf.Module):
             self.bias = tf.Variable(init2([d_output, 1], dtype=tf.float32),trainable=True)
         else:
             self.bias = 0.0
-    @tf.Module.with_name_scope
     
-    def __call__(self, x):
+    def call(self, x):
         return contract('... u l, v u -> ... v l', x, self.weight) + self.bias
 
 
@@ -173,7 +166,6 @@ def LinearActivation(
         linear = tf.keras.layers.Dense(d_output,use_bias=bias,kernel_initializer=get_initializer(initializer, activation),
     bias_initializer=tf.keras.initializers.Zeros())
 
-        # Weight norm
         if weight_norm:
             linear = tfp.layers.weight_norm.WeightNorm(linear)
 
@@ -185,7 +177,7 @@ def LinearActivation(
 
 
 
-class SSKernelNPLR(tf.Module):
+class SSKernelNPLR(tf.keras.Model):
     """Stores a representation of and computes the SSKernel function K_L(A^dt, B^dt, C) corresponding to a discretized state space, where A is Normal + Low Rank (NPLR)
 
     The class name stands for 'State-Space SSKernel for Normal Plus Low-Rank'.
@@ -250,11 +242,12 @@ class SSKernelNPLR(tf.Module):
         if double_length:
             self.L *= 2
             self._omega(self.L, dtype=C.dtype, cache=True)
-
+    
     def _omega(self, L, dtype,  cache=True):
         """ Calculate (and cache) FFT nodes and their "unprocessed" them with the bilinear transform
         This should be called everytime the internal length self.L changes """
-        omega = tf.convert_to_tensor(np.exp(-2j * np.pi / (L)), dtype=dtype)  # \omega_{2L}
+        omega = tf.convert_to_tensor(np.exp(-2j * np.pi / (L)), dtype=dtype)
+        #omega = tf.math.exp(-2j * tf.constant(math.pi,dtype=dtype) / tf.cast(L,dtype=dtype))  # \omega_{2L}
         omega = omega ** tf.cast(tf.range(start = 0, limit = L // 2 + 1, delta = 1) ,dtype=tf.complex64) 
         z = 2 * (1 - omega) / (1 + omega)
         if cache:
@@ -270,16 +263,13 @@ class SSKernelNPLR(tf.Module):
         returns: (..., L)
         """
         cauchy_matrix = tf.expand_dims(v,-1) / (tf.expand_dims(z,-2) - tf.expand_dims(w,-1)) # (... N L)
-
         return tf.math.reduce_sum(cauchy_matrix, axis=-2)
 
     
-
     def __init__(
         self,
         L, w, P, B, C, log_dt,
         trainable=None,
-        lr=None,
         length_correction=True,
        
     ):
@@ -295,7 +285,6 @@ class SSKernelNPLR(tf.Module):
         C: (H, C, N) system is 1-D to c-D (channels)
 
         trainable: toggle which of the parameters is trainable
-        lr: add hook to set lr of hippo parameters specially (everything besides C)
         length_correction: multiply C by (I - dA^L) - can be turned off when L is large for slight speedup at initialization (only relevant when N large as well)
 
         Note: tensor shape N here denotes half the true state size, because of conjugate symmetry
@@ -311,6 +300,7 @@ class SSKernelNPLR(tf.Module):
         self.N = w.shape[-1]
         H = self.H
         # Broadcast everything to correct shapes
+        
         C = tf.broadcast_to(C,tf.broadcast_static_shape(C.shape, tf.TensorShape([1, self.H, self.N])))
         B = repeat(B, 'n -> 1 h n', h=H)
         P = repeat(P, 'r n -> r h n', h=H)
@@ -327,59 +317,29 @@ class SSKernelNPLR(tf.Module):
         if trainable is None: trainable = {}
         if trainable == False: trainable = {}
         if trainable == True: trainable, train = {}, True
-            
+
 
         self.log_dt = tf.Variable(log_dt,trainable=trainable.get('dt', train),name = 'log_dt',shape=log_dt.shape)
-        if trainable.get('dt', train):
-            try:
-                self.update_optim(name = "log_dt", lr=lr['dt'])
-            except:
-                print('trainable and lr dictionary do not match')
 
         self.B  = tf.Variable(_c2r(B),trainable=trainable.get('B', train),name = 'B',shape=_c2r(B).shape)
-        if trainable.get('B', train):
-            try:
-                self.update_optim(name ='B', lr=lr['B'])
-            except:
-                print('trainable and lr dictionary do not match')
-        
-
 
         self.P = tf.Variable(_c2r(P),trainable=trainable.get('P', train),name ='P',shape=_c2r(P).shape)
-        if trainable.get('P', train):
-            try:
-                self.update_optim(name = "P", lr=lr['P'])
-            except:
-                print('trainable and lr dictionary do not match')
-       
         self.w = tf.Variable(_c2r(w),trainable=trainable.get('A', 0),name = "w",shape=_c2r(w).shape)
-        if trainable.get('A', train):
-            try:
-                self.update_optim(name = "w", lr=lr['A'])
-            except:
-                print('trainable and lr dictionary do not match')
-
+       
         P_clone = tf.identity(P)
 
         self.Q = tf.Variable(_c2r(_resolve_conj(P_clone)),trainable=trainable.get('P', train),name = "Q", shape = _c2r(_resolve_conj(P_clone)).shape)
-        if trainable.get('P', train):
-            try:
-                self.update_optim(name = "Q", lr=lr['P'])
-            except:
-                print('trainable and lr dictionary do not match')
-
-
+        
         if length_correction:
             self._setup_C()
 
-    @tf.Module.with_name_scope
     def _w(self):
         """ Get the internal w (diagonal) parameter """
         w = _r2c(self.w)  # (..., N)
            
         return w
 
-    def __call__(self, state=None, rate=1.0, L=None):
+    def call(self, state=None, rate=1, L=None):
         """
         state: (..., s, N) extra tensor that augments B
         rate: sampling rate factor
@@ -389,15 +349,15 @@ class SSKernelNPLR(tf.Module):
         # Handle sampling rate logic
         # The idea is that this kernel's length (in continuous units) is self.L, while we are asked to provide a kernel of length L at (relative) sampling rate
         # If either are not passed in, assume we're not asked to change the scale of our kernel
-        
         assert not (rate is None and L is None)
-        L = tf.cast(L,dtype = tf.float32)
+        #L = tf.cast(L,dtype = tf.float32)
         if rate is None:
             rate = self.L / L
         if L is None:
             L = int(self.L / rate)
 
         # Increase the internal length if needed
+     
         while rate * L > self.L:
             self.double_length()
    
@@ -536,15 +496,15 @@ class SSKernelNPLR(tf.Module):
             state = tf.zeros([self.H, self.N], dtype=C.dtype)
 
         step_params = self.step_params.copy()
-        if state.get_shape().as_list()[-1] == self.N: # Only store half of the conjugate pairs; should be true by default
+        if state.shape[-1] == self.N: # Only store half of the conjugate pairs; should be true by default
             # There should be a slightly faster way using conjugate symmetry
             contract_fn = lambda p, x, y: contract('r h n, r h m, ... h m -> ... h n', _conj(p), _conj(x), _conj(y))[..., :self.N] # inner outer product
         else:
-            assert state.get_shape().as_list()[-1] == 2*self.N
+            assert state.shape[-1] == 2*self.N
             step_params = {k: _conj(v) for k, v in step_params.items()}
             # TODO worth setting up a contract_expression in default_state if we want to use this at inference time for stepping
             contract_fn = lambda p, x, y: tf.convert_to_tensor(contract('r h n, r h m, ... h m -> ... h n', p.numpy(), x.numpy(), y.numpy())) # inner outer product
-
+           
         D = step_params["D"]  # (H N)
         E = step_params["E"]  # (H N)
         R = step_params["R"]  # (r H N)
@@ -570,144 +530,47 @@ class SSKernelNPLR(tf.Module):
         
         u = tf.ones(self.H,dtype =(_r2c(self.C)).dtype)
         self.dB = rearrange(_conj(self._step_state_linear(u=u)), '1 h n -> h n') # (H N)
+        
+        
+        
 
-            
-    def update_optim(self, name,  lr=None):
-        """set lr of hippo parameters specially (everything besides C)"""
-        optim = {}
-        if lr is not None:
-            optim["lr"] = lr
-        if len(optim) > 0:
-            setattr(getattr(self, name), "_optim", optim)
-
-
-class HippoSSKernel(tf.Module):
+class HippoSSKernel(tf.keras.Model):
   
     """Wrapper around SSKernel that generates A, B, C, dt according to HiPPO arguments."""
     
-    @tf.function(experimental_relax_shapes=True)
-    def embed_c2r(self,A):
-        A = rearrange(A, '... m n -> ... m () n ()')
-        A = np.pad(A, ((0, 0), (0, 1), (0, 0), (0, 1))) + \
-            np.pad(A, ((0, 0), (1, 0), (0, 0), (1,0)))
-        return rearrange(A, 'm x n y -> (m x) (n y)')
-
-    
-    @tf.function(experimental_relax_shapes=True)
-    def transition(self,measure, N, **measure_args):
-        """ A, B transition matrices for different measures
-
-        measure: the type of measure
-          legt - Legendre (translated)
-          legs - Legendre (scaled)
-          glagt - generalized Laguerre (translated)
-          lagt, tlagt - previous versions of (tilted) Laguerre with slightly different normalization
+    def transition(self, N, **measure_args):
+        """ A, B transition matrices 
         """
-        # Laguerre (translated)
-        if measure == 'lagt':
-            b = measure_args.get('beta', 1.0)
-            A = np.eye(N) / 2 - np.tril(np.ones((N, N)))
-            B = b * np.ones((N, 1))
-        # Generalized Laguerre
-        # alpha 0, beta small is most stable (limits to the 'lagt' measure)
-        # alpha 0, beta 1 has transition matrix A = [lower triangular 1]
-        elif measure == 'glagt':
-            alpha = measure_args.get('alpha', 0.0)
-            beta = measure_args.get('beta', 0.01)
-            A = -np.eye(N) * (1 + beta) / 2 - np.tril(np.ones((N, N)), -1)
-            B = ss.binom(alpha + np.arange(N), np.arange(N))[:, None]
-
-            L = np.exp(.5 * (ss.gammaln(np.arange(N)+alpha+1) - ss.gammaln(np.arange(N)+1)))
-            A = (1./L[:, None]) * A * L[None, :]
-            B = (1./L[:, None]) * B * np.exp(-.5 * ss.gammaln(1-alpha)) * beta**((1-alpha)/2)
-        # Legendre (translated)
-        elif measure == 'legt':
-            Q = np.arange(N, dtype=np.float64)
-            R = (2*Q + 1) ** .5
-            j, i = np.meshgrid(Q, Q)
-            A = R[:, None] * np.where(i < j, (-1.)**(i-j), 1) * R[None, :]
-            B = R[:, None]
-            A = -A
-        # Legendre (scaled)
-        elif measure == 'legs':
-            q = np.arange(N, dtype=np.float64)
-            col, row = np.meshgrid(q, q)
-            r = 2 * q + 1
-            M = -(np.where(row >= col, r, 0) - np.diag(q))
-            T = np.sqrt(np.diag(2 * q + 1))
-            A = T @ M @ np.linalg.inv(T)
-            B = np.diag(T)[:, None]
-            B = B.copy() # Otherwise "UserWarning: given NumPY array is not writeable..." after torch.as_tensor(B)
-        elif measure == 'fourier':
-            freqs = np.arange(N//2)
-            d = np.stack([freqs, np.zeros(N//2)], axis=-1).reshape(-1)[:-1]
-            A = 2*np.pi*(np.diag(d, 1) - np.diag(d, -1))
-            A = A - self.embed_c2r(np.ones((N//2, N//2)))
-            B = self.embed_c2r(np.ones((N//2, 1)))[..., :1]
-        elif measure == 'random':
-            A = np.random.randn(N, N) / N
-            B = np.random.randn(N, 1)
-        elif measure == 'diagonal':
-            A = -np.diag(np.exp(np.random.randn(N)))
-            B = np.random.randn(N, 1)
-        else:
-            raise NotImplementedError
-
+        q = tf.range(start=0,limit = N, dtype=tf.float32)
+        col, row = tf.meshgrid(q, q)
+        r = 2 * q + 1
+        M = -(tf.where(row >= col, r, 0) - tf.linalg.diag(q))
+        T = tf.math.sqrt(tf.linalg.diag(2 * q + 1))
+        A = T @ M @ tf.linalg.inv(T)
+        B = tf.linalg.diag_part(T)[:, None]
+     
         return A, B
 
-    
-    def rank_correction(self,measure, N, rank=1, dtype=tf.float32):
+    def rank_correction(self, N, rank=1, dtype=tf.float32):
         """ Return low-rank matrix L such that A + L is normal """
-
-        if measure == 'legs':
-            assert rank >= 1
-            P = tf.expand_dims(tf.math.sqrt(.5+tf.range(start=0, limit=N, delta=1, dtype=dtype)),0) # (1 N)
-        elif measure == 'legt':
-            assert rank >= 2
-            P = tf.math.sqrt(1+2*tf.range(start=0, limit=N, delta=1, dtype=dtype)) # (N)
-            P0 = tf.clone(P)
-            #P0 = P.clone()
-            P0[0::2] = 0.
-            P1 = tf.clone(P)
-            #P1 = P.clone()
-            P1[1::2] = 0.
-            P = tf.stack([P0, P1], dim=0) # (2 N)
-        elif measure == 'lagt':
-            assert rank >= 1
-            P = .5**.5 * tf.ones([1, N], dtype=dtype)
-        elif measure == 'fourier':
-            P = tf.ones(N, dtype=dtype) # (N)
-            P0 = P.clone()
-            P0[0::2] = 0.
-            P1 = P.clone()
-            P1[1::2] = 0.
-            P = tf.stack([P0, P1], axis=0) # (2 N)
-        else: raise NotImplementedError
-
-        d = P.get_shape().as_list()[0] 
+        assert rank >= 1
+        P = tf.expand_dims(tf.math.sqrt(.5+tf.range(start=0, limit=N, delta=1, dtype=dtype)),0) # (1 N)
+        d = P.shape[0] 
         if rank > d:
             P = tf.concat([P, tf.zeros((rank-d, N), dtype=dtype)], axis=0) # (rank N)
         return P
 
-    def nplr(self,measure, N, rank=1, dtype=tf.float32):
+    def nplr(self, N, rank=1, dtype=tf.float32):
         """ Return w, p, q, V, B such that
         (w - p q^*, B) is unitarily equivalent to the original HiPPO A, B by the matrix V
         i.e. A = V[w - p q^*]V^*, B = V B
         """
         assert dtype == tf.float32 or tf.complex64
-        if measure == 'random':
-            dtype = tf.complex64 if dtype == tf.float32 else tf.complex128
-            w = -tf.math.exp(tf.random.normal(N//2)) + 1j*tf.random.normal(N//2)
-            P = tf.random.normal((rank, N//2), dtype=dtype)
-            B = tf.random.normal(N//2, dtype=dtype)
-            V = tf.eye(N, dtype=dtype)[..., :N//2] # Only used in testing
-            return w, P, B, V
 
-        A, B = self.transition(measure, N)
-        A = tf.convert_to_tensor(A, dtype=dtype) # (N, N)
-        B = tf.convert_to_tensor(B, dtype=dtype)[:, 0] # (N,)
+        A, B = self.transition(N)
+        B = B[:, 0] 
 
-        P = self.rank_correction(measure, N, rank=rank, dtype=dtype)
+        P = self.rank_correction(N, rank=rank, dtype=dtype)
         AP = A + tf.math.reduce_sum(tf.expand_dims(P, -2)*tf.expand_dims(P, -1), axis=-3)
         w, V = eigen(AP)
 
@@ -727,13 +590,11 @@ class HippoSSKernel(tf.Module):
         H,
         N=64,
         L=1,
-        measure="legs",
         rank=1,
         channels=1, 
         dt_min=0.001,
         dt_max=0.1,
         trainable=None, 
-        lr=None, 
         length_correction=True, 
         resample=False, 
         ):
@@ -743,7 +604,6 @@ class HippoSSKernel(tf.Module):
             H: 2*C
             N: the dimension of the state, also denoted by N
             L: the maximum sequence length
-            measure: chosen from ['legs','legt','lagt','fourier'], measure used for HIPPO
             rank: used for HIPPO
             channels: 1-dim to C-dim map; can think of C as having separate "heads"
             dt_min: used to learn the step size log_dt
@@ -756,33 +616,32 @@ class HippoSSKernel(tf.Module):
         """
         
         super().__init__()
+        
+        
         self.N = N
         self.H = H
         L = L or 1
         dtype =  tf.float32
         cdtype = tf.complex64
-        self.rate = None if resample else 1.0
+        self.rate = None if resample else 1
         self.channels = channels
 
         # Generate dt
         log_dt =  tf.random.uniform([self.H],minval=0,maxval=1,dtype=dtype) * (math.log(dt_max) - math.log(dt_min)) + math.log(dt_min)
 
-        w, p, B, _ = self.nplr(measure, self.N, rank, dtype=dtype)
-        
+        w, p, B, _ = self.nplr(self.N, rank, dtype=dtype)
+
         C =  tf.complex(tf.random.uniform([channels, self.H, self.N // 2],minval=0,maxval=1),tf.random.uniform([channels, self.H, self.N // 2],minval=0,maxval=1))
        
         self.kernel = SSKernelNPLR(
             L, w, p, B, C,
             log_dt,
             trainable=trainable,
-            lr=lr,
             length_correction=length_correction,
-          
         )
 
-    @tf.Module.with_name_scope
     
-    def __call__(self, L=None):
+    def call(self, u = None):
         """Pass to S4.
         Args:
             inputs: L, sequence length
@@ -790,13 +649,14 @@ class HippoSSKernel(tf.Module):
             outputs: tf.Tensor, [2*C, H, L]
         """
         
+        L = u.shape[-1]
         k, _ = self.kernel(state=None,rate=self.rate, L=L)
         return tf.cast(k, dtype=tf.float32, name=None)
 
     
 
 
-class S4(tf.Module):
+class S4(tf.keras.Model):
     """Receive the kernel constructed by HippoSSKernel and generate output y = y + Du """
 
     def __init__(
@@ -864,10 +724,9 @@ class S4(tf.Module):
             activate=True,
             weight_norm=weight_norm,
         )
-     
-    @tf.Module.with_name_scope    
+        
 
-    def __call__(self, u, **kwargs): # absorbs return_output and transformer src mask
+    def call(self, u, **kwargs): # absorbs return_output and transformer src mask
         """Pass to S4.
         Args:
             inputs: tf.Tensor,u: [B, 2*C, L]  if self.transposed else [B, L, 2*C]
@@ -878,13 +737,15 @@ class S4(tf.Module):
         if not self.transposed: u = tf.transpose(u,perm = [0,2,1])
         
         L = u.shape[-1]
-       
         # Compute SS Kernel
-        k = self.kernel(L=L) # (C H L) (B C H L)
+        
+        k = self.kernel(u) # (C H L) (B C H L)
         
         # Convolution
         if self.bidirectional:
-            k0, k1 = rearrange(k, '(s c) h l -> s c h l', s=2)
+            kall = rearrange(k, '(s c) h l -> s c h l', s=2)
+            k0 = kall[0]
+            k1 = kall[1]
             k = tf.pad(k0, [[0,0],[0,0],[0, L]], "CONSTANT")  +  tf.pad(tf.reverse(k1,[-1]), [[0,0],[0,0],[L,0]], "CONSTANT")
            
         k_f = tf.signal.rfft(k, fft_length=tf.convert_to_tensor([2*L])) # (C H L)
@@ -908,7 +769,7 @@ class S4(tf.Module):
 
 
 
-class S4Layer(tf.Module):
+class S4Layer(tf.keras.Model):
     """A single S4layer used in residual block """
     
     def __init__(self, features, lmax, N=64, dropout=0.0, bidirectional=True, layer_norm=True):
@@ -925,9 +786,8 @@ class S4Layer(tf.Module):
         self.norm_layer = tf.keras.layers.LayerNormalization(axis=-1) if layer_norm else tf.identity
         self.dropout = tf.keras.layers.SpatialDropout2D(dropout) if dropout>0 else tf.identity
     
-    @tf.Module.with_name_scope
-    
-    def __call__(self, x):
+
+    def call(self, x):
         """Pass to S4Layer.
         Args:
             inputs: tf.Tensor, [B, 2*C, L], output tensor
@@ -938,4 +798,6 @@ class S4Layer(tf.Module):
         xout = self.dropout(xout)
         xout = xout + x # skip connection   # batch, feature, seq
         return self.norm_layer(xout)
+
+
 
