@@ -3,17 +3,46 @@ import pandas as pd
 from datetime import datetime
 from datetime import timedelta
 import numpy as np
+from sklearn import preprocessing
 
 
 def insert(df, i, df_add):
+    """
+    Insert one row in dataframe
+
+    Inputs:
+    df:                       Dataframe    
+    i:                        insert position
+    df_add:                   insert content
+    
+    Returns:                  Dataframe                
+    """
+    
     df1 = df.iloc[:i, :]
     df2 = df.iloc[i:, :]
     result = pd.concat([df1,df_add,df2],ignore_index=True)
     return result
 
+def preprocess(x):
+    """
+    Normalization for features of each stock
+
+    Inputs:
+    x:                        Series
+    
+    Returns:                  Series
+    """
+    return pd.Series(preprocessing.scale(np.array(x), axis=0, with_mean=True,with_std=True,copy=True))
+
 
 def data_download(index_name):
-    index=pd.read_csv('./' + index_name + '.csv',header =None)
+    """
+    Download stock data through yfinance 
+
+    Parameters:
+    index_name(str):       choose from ['HSI','DJ30','EU50']
+    """
+    index=pd.read_csv('./datasets/'+index_name+'/' + index_name + '.csv',header =None)
     
     if index_name == 'HSI':
         index0 = list(index.iloc[:,0])
@@ -36,12 +65,20 @@ def data_download(index_name):
         except:
             print('Data download for '+ticker+' fails, please double check')
 
-
-    all_data.to_csv(index_name+'_data.csv')
+    all_data.to_csv('./datasets/'+index_name+'/'+index_name+'_data.csv')
     print('Finished downloaded data for '+index_name+' and save in '+index_name+'_data.csv')
+
     
+
 def process(index_name):
-    INDEX_data = pd.read_csv('./'+ str(index_name) +'_data.csv')
+    """
+    process stock data to generate model input array, and the historical mask pattern
+
+    Parameters:
+    index_name(str):                choose from ['HSI','DJ30','EU50']
+    """
+    
+    INDEX_data = pd.read_csv('./datasets/'+index_name+'/'+index_name+'_data.csv')
     tickers = list(set(INDEX_data['ticker'].tolist()))
     INDEX_data = INDEX_data.drop(columns=['Unnamed: 0'])
     delta = timedelta(days=1)
@@ -70,7 +107,7 @@ def process(index_name):
             count += 1
         print('number of holiday days for '+ str(ticker) + ' in ' + str(index_name)+ ' index : ' + str(len(holiday_INDEX)))                
         assert len(holiday_INDEX) == count
-    INDEX_data.to_csv('./'+ str(index_name) +'_data_withmissing'+'.csv')
+    #INDEX_data.to_csv('./'+ str(index_name) +'_data_withmissing'+'.csv')
     
     mask = []
     count = 0
@@ -94,20 +131,78 @@ def process(index_name):
 
     for add_zero in range(20 - len(mask[-1])):
         mask[-1].append(0)
+        
+    mask = np.expand_dims(mask,axis=-1)
+    mask = np.repeat(mask,6,axis=2)
+    mask = np.unique(mask,axis=0)
+
+    for i in range(mask.shape[0]):
+        if mask[i].sum() == 0:
+            index = i
+    mask = np.delete(mask,index, 0)
+    mask = np.where(mask==0,1,0)
+    
     print('generating '+str(len(mask))+' patterns for index '+str(index_name))   
-    np.save(str(index_name)+'_mask.npy',np.array(mask))
+    np.save('./datasets/'+index_name+'/'+index_name+'_mask.npy',np.array(mask))
+   
+    
+    #INDEX_data = INDEX_data.drop(columns=['Unnamed: 0'])
+    ticker_list = list(set(INDEX_data['ticker'].tolist()))
+    
+    INDEX_data_normed = pd.DataFrame({'Date':[],'Open':[],'High':[],'Low':[],'Close':[],'Adj Close':[],'Volume':[],'ticker':[],'datetime':[]})
+    for ticker in ticker_list:
+        subdf = INDEX_data[INDEX_data['ticker'] == ticker].reset_index()
+        subdf = subdf.drop(columns=['index'])
+        test = pd.DataFrame({'Date':subdf['Date'],'Open':preprocess(subdf['Open']),'High':preprocess(subdf['High']),
+                             'Low':preprocess(subdf['Low']),'Close':preprocess(subdf['Close']),
+                             'Adj Close':preprocess(subdf['Adj Close']), 'Volume':preprocess(subdf['Volume']),
+                             'ticker':subdf['ticker'],'datetime':subdf['datetime']})
+        INDEX_data_normed = pd.concat([INDEX_data_normed,test])
     
     
+    tickers = list(set(INDEX_data_normed['ticker'].to_list()))
+
+    single = INDEX_data_normed[INDEX_data_normed['ticker']==tickers[0]].reset_index()
+    single = single.drop(columns=['index'])
+    total_length = single.shape[0]
+
+    train_data = single.loc[0:20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
+
+    for i in range(1,int(total_length//10)-1):
+        start_index = i*10
+        train_data = np.vstack((train_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+    total_train = train_data
+
+
+    for ticker in tickers[1:]:
+        single = INDEX_data_normed[INDEX_data_normed['ticker']==ticker].reset_index()
+        single = single.drop(columns=['index'])
+        total_length = single.shape[0]
+
+        train_data = single.loc[0:20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
+        for i in range(1,int(total_length//10)-1):
+            start_index = i*10
+            train_data = np.vstack((train_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+        total_train = np.vstack((total_train,train_data))
+        
+    data = np.array(np.split(total_train,train_data.shape[0]*len(tickers)//20))
+    training_data = data[:int(len(data)*0.7)]
+    validation_data = data[int(len(data)*0.7):int(len(data)*0.8)]
+    testing_data = data[int(len(data)*0.8):]
+
+    np.save('./datasets/'+index_name+'/'+index_name+'_train.npy',training_data)
+    np.save('./datasets/'+index_name+'/'+index_name+'_val.npy',validation_data)
+    np.save('./datasets/'+index_name+'/'+index_name+'_test.npy',testing_data)
 
     
-    
-    
 
-    
-    
 if __name__ == "__main__":
+    #data_download('DJ30')
+    #process('DJ30')
     for index_name in ['DJ30','EU50','HSI']:
         data_download(index_name)
     for index_name in ['DJ30','EU50','HSI']:
         process(index_name)
+
+
         
