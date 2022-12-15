@@ -4,6 +4,8 @@ from datetime import datetime
 from datetime import timedelta
 import numpy as np
 from sklearn import preprocessing
+import warnings 
+warnings.filterwarnings('ignore')
 
 
 def insert(df, i, df_add):
