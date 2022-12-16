@@ -80,6 +80,7 @@ def process(index_name):
     index_name(str):                choose from ['HSI','DJ30','EU50']
     """
     
+    # insert the missing values in the downloaded dataframe 
     INDEX_data = pd.read_csv('./datasets/'+index_name+'/'+index_name+'_data.csv')
     tickers = list(set(INDEX_data['ticker'].tolist()))
     INDEX_data = INDEX_data.drop(columns=['Unnamed: 0'])
@@ -100,6 +101,9 @@ def process(index_name):
             if start not in INDEX_time_stamp and int(start.weekday()) != 5 and int(start.weekday()) != 6:  
                 holiday_INDEX.append(start)
             start = start + delta
+            
+        if ticker[-2:] == 'DE':
+            holiday_INDEX_DE = holiday_INDEX
 
         count = 0
         for i in holiday_INDEX:
@@ -111,6 +115,10 @@ def process(index_name):
         assert len(holiday_INDEX) == count
     #INDEX_data.to_csv('./'+ str(index_name) +'_data_withmissing'+'.csv')
     
+    if index_name == 'EU50':
+        holiday_INDEX = holiday_INDEX_DE
+    
+    #generate mask patterns according to historical patterns
     mask = []
     count = 0
     datetime_series = INDEX_data['datetime'].tolist()
@@ -148,6 +156,7 @@ def process(index_name):
     np.save('./datasets/'+index_name+'/'+index_name+'_mask.npy',np.array(mask))
    
     
+    # data normalization 
     #INDEX_data = INDEX_data.drop(columns=['Unnamed: 0'])
     ticker_list = list(set(INDEX_data['ticker'].tolist()))
     
@@ -160,37 +169,73 @@ def process(index_name):
                              'Adj Close':preprocess(subdf['Adj Close']), 'Volume':preprocess(subdf['Volume']),
                              'ticker':subdf['ticker'],'datetime':subdf['datetime']})
         INDEX_data_normed = pd.concat([INDEX_data_normed,test])
+        
     
-    
+    #generate training/validation/test array
     tickers = list(set(INDEX_data_normed['ticker'].to_list()))
 
+    
     single = INDEX_data_normed[INDEX_data_normed['ticker']==tickers[0]].reset_index()
     single = single.drop(columns=['index'])
     total_length = single.shape[0]
-
+    train_length = int(total_length*0.7)
+    val_length = int(total_length*0.1)
+    test_length = int(total_length*0.2)
+    
+    
     train_data = single.loc[0:20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
-
-    for i in range(1,int(total_length//10)-1):
+    for i in range(1,int(train_length//10)-1):
         start_index = i*10
         train_data = np.vstack((train_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+        
+    val_data = single.loc[(int(train_length//10)-1)*10:(int(train_length//10)-1)*10+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
+    for i in range(int(train_length//10),int((train_length+val_length)//10)-1):
+        start_index = i*10
+        val_data = np.vstack((val_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+        
+    test_data = single.loc[(int((train_length+val_length)//10)-1)*10:(int((train_length+val_length)//10)-1)*10+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
+    for i in range(int((train_length+val_length)//10),int((train_length+val_length+test_length)//10)-1):
+        start_index = i*10
+        test_data = np.vstack((test_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+    
     total_train = train_data
+    total_val = val_data
+    total_test = test_data
 
 
     for ticker in tickers[1:]:
         single = INDEX_data_normed[INDEX_data_normed['ticker']==ticker].reset_index()
         single = single.drop(columns=['index'])
         total_length = single.shape[0]
+        
+        train_length = int(total_length*0.7)
+        val_length = int(total_length*0.1)
+        test_length = int(total_length*0.2)
 
         train_data = single.loc[0:20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
-        for i in range(1,int(total_length//10)-1):
+        for i in range(1,int(train_length//10)-1):
             start_index = i*10
             train_data = np.vstack((train_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+
+        val_data = single.loc[(int(train_length//10)-1)*10:(int(train_length//10)-1)*10+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
+        for i in range(int(train_length//10),int((train_length+val_length)//10)-1):
+            start_index = i*10
+            val_data = np.vstack((val_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+
+        test_data = single.loc[(int((train_length+val_length)//10)-1)*10:(int((train_length+val_length)//10)-1)*10+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()
+        for i in range(int((train_length+val_length)//10),int((train_length+val_length+test_length)//10)-1):
+            start_index = i*10
+            test_data = np.vstack((test_data,single.loc[start_index:start_index+20-1,['Open','High','Low','Close','Adj Close','Volume']].to_numpy()))
+
         total_train = np.vstack((total_train,train_data))
-        
-    data = np.array(np.split(total_train,train_data.shape[0]*len(tickers)//20))
-    training_data = data[:int(len(data)*0.7)]
-    validation_data = data[int(len(data)*0.7):int(len(data)*0.8)]
-    testing_data = data[int(len(data)*0.8):]
+        total_val = np.vstack((total_val,val_data))
+        total_test = np.vstack((total_test,test_data))
+
+    
+    training_data = np.reshape(total_train,[-1,20,6])
+    validation_data = np.reshape(total_val,[-1,20,6])
+    testing_data = np.reshape(total_test,[-1,20,6])
+  
 
     np.save('./datasets/'+index_name+'/'+index_name+'_train.npy',training_data)
     np.save('./datasets/'+index_name+'/'+index_name+'_val.npy',validation_data)
@@ -199,12 +244,8 @@ def process(index_name):
     
 
 if __name__ == "__main__":
-    #data_download('DJ30')
-    #process('DJ30')
     for index_name in ['DJ30','EU50','HSI']:
         data_download(index_name)
     for index_name in ['DJ30','EU50','HSI']:
         process(index_name)
 
-
-        
