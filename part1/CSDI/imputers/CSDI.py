@@ -11,7 +11,7 @@ from imputers.transformerencoder import EncoderLayer as transformerencoder
 import tensorflow as tf
 import tensorflow_probability as tfp
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 
