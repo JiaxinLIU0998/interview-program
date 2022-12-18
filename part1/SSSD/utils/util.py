@@ -167,13 +167,16 @@ def get_mask_mnr(sample, k):
     as per ts imputers"""
 
     mask = tf.ones(sample.shape)
-    length_index = tf.convert_to_tensor(range(mask.shape[0]))
-    list_of_segments_index = tf.split(length_index, k)
+    length_index = np.array(range(mask.shape[0]))
+    list_of_segments_index = np.array_split(length_index, k)
+    mask = tf.Variable(mask,trainable=False)
     for channel in range(mask.shape[1]):
         s_nan = random.choice(list_of_segments_index)
-        mask[:, channel][s_nan[0]:s_nan[-1] + 1] = 0
+        idx = [i for i in range(s_nan[0],s_nan[-1] + 1)]
+        tensor=tf.tensor_scatter_nd_update(mask[:,channel],tf.expand_dims(idx,axis = 1),[0]*(len(idx)))
+        mask[:,channel].assign(tensor)
 
-    return mask
+    return tf.convert_to_tensor(mask)
 
 
 def get_mask_bm(sample, k):
@@ -183,9 +186,13 @@ def get_mask_bm(sample, k):
 
     mask = tf.ones(sample.shape)
     length_index = tf.convert_to_tensor(range(mask.shape[0]))
-    list_of_segments_index = tf.split(length_index, k)
+    list_of_segments_index = np.array_split(length_index, k)
     s_nan = random.choice(list_of_segments_index)
+    idx = [i for i in range(s_nan[0],s_nan[-1] + 1)]
+    mask = tf.Variable(mask,trainable=False)
     for channel in range(mask.shape[1]):
-        mask[:, channel][s_nan[0]:s_nan[-1] + 1] = 0
+        tensor=tf.tensor_scatter_nd_update(mask[:,channel],tf.expand_dims(idx,axis = 1),[0]*(len(idx)))
+        mask[:,channel].assign(tensor)
 
-    return mask
+    return tf.convert_to_tensor(mask)
+
