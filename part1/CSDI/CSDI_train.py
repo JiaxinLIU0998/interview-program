@@ -8,7 +8,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 
-CSDI_model = CSDIImputer(0)
+CSDI_model = CSDIImputer(3)
 
 CSDI_model.train(
     #training_data,
@@ -34,3 +34,4 @@ CSDI_model.train(
     timeemb = 128,
     featureemb = 16,
     target_strategy = 'random')
+
