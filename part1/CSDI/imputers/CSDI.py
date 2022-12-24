@@ -53,12 +53,12 @@ def train(model, config, train_loader, val_loader, valid_epoch_interval=1, path_
 def quantile_loss(target, forecast, q: float, eval_points) -> float:
     forecast = tf.cast(forecast,tf.float32)
     target = tf.cast(target,tf.float32)
-    return  2 * tf.math.reduce_sum(tf.math.abs((forecast - target) * eval_points * ((target <= forecast) * 1.0 - q)), axis=0)
+    return  2 * tf.math.reduce_sum(tf.math.abs((forecast - target) * eval_points * ((target.numpy() <= forecast.numpy()) * 1.0 - q)))
 
 
 
 def calc_denominator(target, eval_points):
-    return tf.math.reduce_sum(tf.math.abs(target * eval_points), axis=0)
+    return tf.math.reduce_sum(tf.math.abs(target * eval_points))
 
 
 def calc_quantile_CRPS(target, forecast, eval_points, mean_scaler, scaler):
