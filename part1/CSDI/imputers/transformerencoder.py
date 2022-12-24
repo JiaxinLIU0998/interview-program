@@ -117,17 +117,15 @@ class EncoderLayer(Layer):
     def call(self, x, padding_mask=None, training=True):
         # Multi-head attention layer
         multihead_output = self.multihead_attention(x, x, x, padding_mask)
-        # Expected output shape = (batch_size, sequence_length, d_model)
+       
         # Add in a dropout layer
         multihead_output = self.dropout1(multihead_output, training=training)
  
         # Followed by an Add & Norm layer
         addnorm_output = self.add_norm1(x, multihead_output)
-        # Expected output shape = (batch_size, sequence_length, d_model)
  
         # Followed by a fully connected layer
         feedforward_output = self.feed_forward(addnorm_output)
-        # Expected output shape = (batch_size, sequence_length, d_model)
  
         # Add in another dropout layer
         feedforward_output = self.dropout2(feedforward_output, training=training)
