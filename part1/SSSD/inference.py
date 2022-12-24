@@ -2,7 +2,9 @@ import os
 import argparse
 import json
 import numpy as np
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from utils.util import get_mask_mnr, get_mask_bm, get_mask_rm
 from utils.util import find_max_epoch, sampling, calc_diffusion_hyperparams
@@ -56,7 +58,7 @@ def generate(output_directory,
     if ckpt_iter == 'max':
         ckpt_iter = find_max_epoch(ckpt_path)
     try: 
-        net.load_weights(output_directory +'/{}/{}.ckpt'.format(ckpt_iter, ckpt_iter))
+        net.load_weights(output_directory +'/{}/{}.ckpt'.format(ckpt_iter, ckpt_iter)).expect_partial()
         print('Successfully loaded model at iteration {}'.format(ckpt_iter))
     except:
         raise Exception('No valid model found')
@@ -66,17 +68,21 @@ def generate(output_directory,
     ### Custom data loading and reshaping ###
     batch_size, masking, missing_k = train_config['batch_size'],train_config['masking'],train_config['missing_k']
     testing_data = np.load(trainset_config['test_data_path'])
-    drop_data = testing_data.shape[0]%batch_size
-    testing_data = testing_data[drop_data:,:,:]
-  
     testing_data = np.transpose(testing_data,(0,2,1))
-    testing_data = np.split(testing_data, 17, 0) 
-    testing_data = np.array(testing_data)
-    testing_data = tf.convert_to_tensor(testing_data)
+    
+    for count,single in enumerate(testing_data):
+        repeated_sample = np.repeat(np.expand_dims(single,axis=0),num_samples,axis=0)
+        if count == 0:
+            repeated = repeated_sample
+        else:
+            repeated = np.concatenate([repeated,repeated_sample],axis=0)
+            
+    testing_data = tf.reshape(tf.convert_to_tensor(repeated),[-1,num_samples,repeated.shape[1],repeated.shape[2]])
     
     print('Data loaded')
 
     all_mse = []
+    all_mae = []
 
     for i, batch in enumerate(testing_data):
         if masking == 'rm':
@@ -86,7 +92,7 @@ def generate(output_directory,
         elif masking == 'bm':
             mask_T = get_mask_bm(batch[0], missing_k)
             
-        mask = tf.transpose(transposed_mask, [1,0]) 
+        mask = tf.transpose(mask_T, [1,0]) 
         mask =  tf.repeat(tf.expand_dims(mask, axis=0), repeats=batch.shape[0],axis = 0)
         loss_mask = tf.cast(tf.where(mask==0,1,0),dtype=tf.bool) 
         batch = tf.transpose(batch, [0,2,1]) 
@@ -104,8 +110,8 @@ def generate(output_directory,
 
         print('generated {} utterances of random_digit at iteration {} '.format(num_samples,ckpt_iter ))
 
-        mse = mean_squared_error(generated_audio[bool_mask], batch[bool_mask])
-        mae = mean_absolute_error(generated_audio[bool_mask], batch[bool_mask])
+        mse = mean_squared_error(generated_audio[loss_mask], batch[loss_mask])
+        mae = mean_absolute_error(generated_audio[loss_mask], batch[loss_mask])
         all_mse.append(mse)
         all_mae.append(mae)
     
@@ -154,3 +160,4 @@ if __name__ == "__main__":
              data_path=trainset_config["test_data_path"],
              masking=train_config["masking"],
              missing_k=train_config["missing_k"])
+
