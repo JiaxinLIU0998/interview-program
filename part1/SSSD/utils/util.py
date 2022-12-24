@@ -134,7 +134,7 @@ def sampling(net, size, diffusion_hyperparams, cond, mask,z,loss_mask):
 
         epsilon_theta = net.predict((x, cond, mask, diffusion_steps, z,loss_mask),batch_size=x.shape[0])  # predict \epsilon according to \epsilon_\theta
         # update x_{t-1} to \mu_\theta(x_t)
-        x = (x - (1 - Alpha[t]) / np.sqrt(1 - Alpha_bar[t]) * epsilon_theta.numpy()) / np.sqrt(Alpha[t])
+        x = (x - (1 - Alpha[t]) / np.sqrt(1 - Alpha_bar[t]) * epsilon_theta) / np.sqrt(Alpha[t])
         if t > 0:
             x = x + Sigma[t] * std_normal(size)  # add the variance term to x_{t-1}
     
@@ -195,4 +195,5 @@ def get_mask_bm(sample, k):
         mask[:,channel].assign(tensor)
 
     return tf.convert_to_tensor(mask)
+
 
