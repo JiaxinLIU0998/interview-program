@@ -153,12 +153,11 @@ def train(output_directory,
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument( '--config', type=str, default='./config/config_SSSDS4_bm_ptx.json',
+    parser.add_argument( '--config', type=str, default='./config/config_SSSDS4_ptx.json',
                         help='JSON file for configuration')
     parser.add_argument('--gpu', type=int, default=0,help='index of the GPU devide')
     
     args = parser.parse_args()
-    args.gpu = 2
     
     gpus = tf.config.list_physical_devices(device_type='GPU')
     tf.config.experimental.set_visible_devices(gpus[args.gpu],'GPU')
