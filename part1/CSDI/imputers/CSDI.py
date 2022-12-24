@@ -11,7 +11,7 @@ from imputers.transformerencoder import EncoderLayer as transformerencoder
 import tensorflow as tf
 import tensorflow_probability as tfp
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 
@@ -28,9 +28,11 @@ def MultiStepLR(initial_learning_rate, lr_steps, lr_rate, name='MultiStepLR'):
 
 
 def train(model, config, train_loader, val_loader, valid_epoch_interval=1, path_save="",batch_size=16):
+    num_of_batch = (train_loader[0].shape[0]//batch_size)
     
-    p1 = int(0.75 * config["epochs"])
-    p2 = int(0.9 * config["epochs"])
+    p1 = int(0.75 * config["epochs"] * num_of_batch)
+    p2 = int(0.9 * config["epochs"] * num_of_batch)
+    
     
     lr_scheduler = MultiStepLR(config["lr"], [p1, p2], 0.1)
     
@@ -49,7 +51,10 @@ def train(model, config, train_loader, val_loader, valid_epoch_interval=1, path_
               validation_batch_size=batch_size,validation_freq=val_freq)
 
 def quantile_loss(target, forecast, q: float, eval_points) -> float:
+    forecast = tf.cast(forecast,tf.float32)
+    target = tf.cast(target,tf.float32)
     return  2 * tf.math.reduce_sum(tf.math.abs((forecast - target) * eval_points * ((target <= forecast) * 1.0 - q)), axis=0)
+
 
 
 def calc_denominator(target, eval_points):
@@ -112,7 +117,7 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, path_save
             all_observed_time.append(observed_time)
             all_generated_samples.append(samples)
 
-            samples_median = tf.sparse.from_dense(samples_median)
+            #samples_median = tf.sparse.from_dense(samples_median)
            
             mse_current = (((tf.cast(samples_median, dtype=tf.float32) - c_target) * eval_points) ** 2) * (scaler ** 2)
             mae_current = (tf.math.abs((tf.cast(samples_median, dtype=tf.float32) - c_target) * eval_points))* scaler
@@ -440,14 +445,6 @@ class CSDI_base(tf.keras.Model):
 
         return side_info
 
-    
-    def calc_loss_valid(self, observed_data, cond_mask, observed_mask, side_info):
-        loss_sum = 0
-        for t in range(self.num_steps):  # calculate loss for all t
-            loss = self.calc_loss(observed_data, cond_mask, observed_mask, side_info, set_t=t)
-            loss_sum += loss.numpy()
-            
-        return loss_sum / self.num_steps
 
     
     def calc_loss(self, observed_data, cond_mask, observed_mask, side_info,set_t=-1):
@@ -494,11 +491,11 @@ class CSDI_base(tf.keras.Model):
                 noisy_obs = observed_data
                 noisy_cond_history = []
                 for t in range(self.num_steps):
-                    noise = tf.random.uniform(shape=noisy_obs.shape, minval=0, maxval=1, dtype=tf.float32)
+                    noise = tf.random.random(shape=noisy_obs.shape, minval=0, maxval=1, dtype=tf.float32)
                     noisy_obs = (self.alpha_hat[t] ** 0.5) * noisy_obs + self.beta[t] ** 0.5 * noise
                     noisy_cond_history.append(noisy_obs * cond_mask)
             
-            current_sample = tf.random.uniform(shape=observed_data.shape, minval=0, maxval=1, dtype=tf.float32)
+            current_sample = tf.random.random(shape=observed_data.shape, minval=0, maxval=1, dtype=tf.float32)
            
             for t in range(self.num_steps - 1, -1, -1):
                 if self.is_unconditional == True:
@@ -517,7 +514,7 @@ class CSDI_base(tf.keras.Model):
                 current_sample = coeff1 * (current_sample - coeff2 * predicted)
 
                 if t > 0:
-                    noise = tf.random.uniform(shape=current_sample.shape, minval=0, maxval=1, dtype=tf.float32)
+                    noise = tf.random.random(shape=current_sample.shape, minval=0, maxval=1, dtype=tf.float32)
                    
                     sigma = (
                                     (1.0 - self.alpha[t - 1]) / (1.0 - self.alpha[t]) * self.beta[t]
@@ -579,8 +576,8 @@ def mask_missing_train_rm(data, missing_ratio=0.0):
     masks = tf.reshape(observed_masks,[-1])
     obs_indices = tf.reshape(tf.where(masks),[-1]).numpy().tolist()
     miss_indices = np.random.choice(obs_indices, int(len(obs_indices) * missing_ratio), replace=False)
-    masks = tf.convert_to_tensor([True if i not in miss_indices else False for i in range(masks.shape[0])],dtype=tf.bool)
-    gt_masks = tf.reshape(masks,observed_masks.shape)
+    gt_masks = tf.convert_to_tensor([True if (i not in miss_indices and masks[i]) else False for i in range(masks.shape[0])],dtype=tf.bool)
+    gt_masks = tf.reshape(gt_masks,observed_masks.shape)
     observed_values = tf.where(tf.math.is_nan(data), tf.zeros_like(data), data)
     observed_masks = tf.cast(observed_masks,dtype = tf.float32)
     gt_masks = tf.cast(gt_masks,dtype = tf.float32)
@@ -793,7 +790,7 @@ class CSDIImputer:
         
         testing_data = np.load(testset_path) 
         testing_data = np.transpose(testing_data,(0,2,1))
-        
+       
 
 
         train_loader = get_dataloader_train_impute(series=training_data,
@@ -839,4 +836,5 @@ class CSDIImputer:
                 batch_size=config["train"]["batch_size"])
         
         
+  
   
