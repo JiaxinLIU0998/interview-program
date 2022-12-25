@@ -286,5 +286,5 @@ if __name__ == "__main__":
     for index_name in ['DJ30','EU50','HSI']:
         data_download(index_name)
     for index_name in ['DJ30','EU50','HSI']:
-        generate(index_name = index_name,data_path='./SSSD/datasets',time_stamp=30)
+        generate(index_name = index_name,data_path='./SSSD/datasets/'+index_name,time_stamp=30)
 
