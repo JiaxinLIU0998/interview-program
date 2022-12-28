@@ -110,26 +110,6 @@ def get_initializer(name, activation=None):
 
 
 
-class TransposedLinear(tf.keras.layers.Layer):
-    """ Linear module on the second-to-last dimension """
-
-    def __init__(self, d_input, d_output, bias=True):
-        super().__init__()
-        
-        init1 = tf.keras.initializers.HeUniform()
-        self.weight = tf.Variable(init1([d_output, d_input], dtype=tf.float32),trainable=True)
-
-        if bias:
-            bound = 1 / math.sqrt(d_input)
-            init2 = tf.random_uniform_initializer(minval=-bound, maxval=bound)
-            self.bias = tf.Variable(init2([d_output, 1], dtype=tf.float32),trainable=True)
-        else:
-            self.bias = 0.0
-    
-    def call(self, x):
-        return contract('... u l, v u -> ... v l', x, self.weight) + self.bias
-
-
 def LinearActivation(
         d_input, d_output, bias=True,
         zero_bias_init=False,
@@ -146,7 +126,14 @@ def LinearActivation(
     if activation == 'glu': d_output *= 2
         
     if transposed:
-        linear = TransposedLinear(d_input, d_output, bias=bias, **kwargs)
+        if bias:
+            bound = 1 / math.sqrt(d_input)
+            linear = tf.keras.layers.Dense(d_output,kernel_initializer=tf.keras.initializers.HeUniform(),
+    bias_initializer=tf.random_uniform_initializer(minval=-bound, maxval=bound))
+            
+        else:
+            linear = tf.keras.layers.Dense(d_output,kernel_initializer=tf.keras.initializers.HeUniform(),
+    bias_initializer=tf.keras.initializers.Zeros())
          # Initialize weight
         if initializer is not None:
             get_initializer(initializer, activation)(linear.weight)
@@ -161,7 +148,7 @@ def LinearActivation(
             linear = tfp.layers.weight_norm.WeightNorm(linear)
 
         if activate and activation is not None:
-            activation = Activation(activation, dim=-2 if transposed else -1)
+            activation = Activation(activation, dim=-1)
             linear = [linear,activation]
             
     else:
@@ -172,7 +159,7 @@ def LinearActivation(
             linear = tfp.layers.weight_norm.WeightNorm(linear)
 
         if activate and activation is not None:
-            activation = Activation(activation, dim=-2 if transposed else -1)
+            activation = Activation(activation, dim=-1)
             linear = [linear,activation]
    
     return linear
@@ -765,11 +752,14 @@ class S4(tf.keras.Model):
         
         if not self.transposed: y = tf.transpose(y,perm = [0,2,1])
             
+        if self.transposed: y = tf.transpose(y,[0,2,1])
+            
         if isinstance(self.output_linear,list):
             for module in self.output_linear:
                 y = module(y)
         else:
             y = self.output_linear(y)
+        if self.transposed: y = tf.transpose(y,[0,2,1])
             
         return y, None
 
@@ -789,7 +779,6 @@ class S4Layer(tf.keras.Model):
                             l_max=lmax, 
                             bidirectional=bidirectional)
         
-        #self.norm_layer = tf.keras.layers.LayerNormalization(axis=-1) if layer_norm else tf.identity
         self.norm_layer = tf.keras.layers.LayerNormalization(axis=-2) if layer_norm else tf.identity
         self.dropout = tf.keras.layers.SpatialDropout2D(dropout) if dropout>0 else tf.identity
     
