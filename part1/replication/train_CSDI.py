@@ -17,7 +17,7 @@ CSDI_model.train(
     trainset_path = './datasets/train_ptbxl_248.npy',
     valset_path = './datasets/val_ptbxl_248.npy',
     testset_path = './datasets/test_ptbxl_248.npy',
-    epochs = 200,
+    epochs = 100,
     samples_generate = 10,
     path_save = "./results/train_ptbxl_248/CSDI/",
     batch_size = 8,
