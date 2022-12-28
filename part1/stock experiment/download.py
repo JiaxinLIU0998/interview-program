@@ -283,6 +283,6 @@ if __name__ == "__main__":
     for index_name in ['DJ30','EU50','HSI']:
         data_download(index_name)
     for index_name in ['DJ30','EU50','HSI']:
-        if not os.path.exists('./SSSD/datasets/'+index_name):
-            os.makedirs('./SSSD/datasets/'+index_name) 
-        generate(index_name = index_name,data_path='./SSSD/datasets/'+index_name,time_stamp=30)
+        if not os.path.exists('./datasets/'+index_name):
+            os.makedirs('./datasets/'+index_name) 
+        generate(index_name = index_name,data_path='./datasets/'+index_name,time_stamp=30)
