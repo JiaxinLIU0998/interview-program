@@ -49,15 +49,16 @@ _resolve_conj = lambda x: tf.math.conj(x)
 class GLU(tf.keras.layers.Layer):
     """implementation of GLU activation function in tensorflow"""
     def __init__(self,dim=-1):
-        super(GLU, self).__init__()
+        super().__init__()
         self.dim = dim
         
+        
     def call(self, x):
-        nc = x.shape[self.dim]
-        assert nc % 2 == 0, 'channels dont divide 2!'
-        return tf.gather(x, indices=[i for i in range(int(nc/2))], axis=self.dim) * tf.sigmoid(tf.gather(x, indices=[i for i in range(int(nc/2),nc)], axis=self.dim))
-
-
+        out, gate = tf.split(x, num_or_size_splits=2, axis=self.dim)
+        gate = tf.math.sigmoid(gate)
+        x = tf.math.multiply(out, gate)
+        return x
+        
 
 def Activation(activation=None, dim=-1):
     """ Return the required avtivation function """
