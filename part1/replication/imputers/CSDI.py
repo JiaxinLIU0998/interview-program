@@ -491,11 +491,11 @@ class CSDI_base(tf.keras.Model):
                 noisy_obs = observed_data
                 noisy_cond_history = []
                 for t in range(self.num_steps):
-                    noise = tf.random.random(shape=noisy_obs.shape, minval=0, maxval=1, dtype=tf.float32)
+                    noise = tf.random.normal(shape=noisy_obs.shape,  mean=0, stddev=1, dtype=tf.float32)
                     noisy_obs = (self.alpha_hat[t] ** 0.5) * noisy_obs + self.beta[t] ** 0.5 * noise
                     noisy_cond_history.append(noisy_obs * cond_mask)
             
-            current_sample = tf.random.random(shape=observed_data.shape, minval=0, maxval=1, dtype=tf.float32)
+            current_sample = tf.random.normal(shape=observed_data.shape,  mean=0, stddev=1, dtype=tf.float32)
            
             for t in range(self.num_steps - 1, -1, -1):
                 if self.is_unconditional == True:
@@ -514,7 +514,7 @@ class CSDI_base(tf.keras.Model):
                 current_sample = coeff1 * (current_sample - coeff2 * predicted)
 
                 if t > 0:
-                    noise = tf.random.random(shape=current_sample.shape, minval=0, maxval=1, dtype=tf.float32)
+                    noise = tf.random.normal(shape=current_sample.shape, mean=0, stddev=1, dtype=tf.float32)
                    
                     sigma = (
                                     (1.0 - self.alpha[t - 1]) / (1.0 - self.alpha[t]) * self.beta[t]
@@ -570,18 +570,16 @@ class CSDI_base(tf.keras.Model):
 
     
 
-
 def mask_missing_train_rm(data, missing_ratio=0.0):
     observed_masks = ~tf.math.is_nan(data)
     masks = tf.reshape(observed_masks,[-1])
-    obs_indices = tf.reshape(tf.where(masks),[-1]).numpy().tolist()
-    miss_indices = np.random.choice(obs_indices, int(len(obs_indices) * missing_ratio), replace=False)
-    gt_masks = tf.convert_to_tensor([True if (i not in miss_indices and masks[i]) else False for i in range(masks.shape[0])],dtype=tf.bool)
+    obs_indices = tf.reshape(tf.where(masks),[-1])#.numpy().tolist()
+    miss_indices = tf.gather(obs_indices, tf.cast(tf.random.uniform([int(obs_indices.shape[0] * missing_ratio)])*obs_indices.shape[0], tf.int32), axis=0)
+    gt_masks = tf.tensor_scatter_nd_update(masks,tf.expand_dims(miss_indices,axis = 1),[False]*(miss_indices.shape[0]))
     gt_masks = tf.reshape(gt_masks,observed_masks.shape)
     observed_values = tf.where(tf.math.is_nan(data), tf.zeros_like(data), data)
     observed_masks = tf.cast(observed_masks,dtype = tf.float32)
     gt_masks = tf.cast(gt_masks,dtype = tf.float32)
-
     return observed_values, observed_masks, gt_masks
 
 
