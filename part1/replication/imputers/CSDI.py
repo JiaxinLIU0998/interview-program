@@ -792,78 +792,29 @@ class CSDIImputer:
         testing_data = np.transpose(testing_data,(0,2,1))
         
 
-        #train_data
-        all_observed_values_train = np.load('all_observed_values_train.npy')
-        all_observed_masks_train = np.load('all_observed_masks_train.npy')
-        all_gt_masks_train = np.load('all_gt_masks_train.npy')
-        all_timepoints_train = np.load('all_timepoints_train.npy')
-        
-        drop_value = all_observed_values_train.shape[0]%config['train']['batch_size']
-        
-        all_observed_values_train = tf.convert_to_tensor(all_observed_values_train[drop_value:])
-        all_observed_masks_train = tf.convert_to_tensor(all_observed_masks_train[drop_value:])
-        all_gt_masks_train = tf.convert_to_tensor(all_gt_masks_train[drop_value:])
-        all_timepoints_train = tf.convert_to_tensor(all_timepoints_train[drop_value:])
-        
-        #validation
-        all_observed_values_val = np.load('all_observed_values_val.npy')
-        all_observed_masks_val = np.load('all_observed_masks_val.npy')
-        all_gt_masks_val = np.load('all_gt_masks_val.npy')
-        all_timepoints_val = np.load('all_timepoints_val.npy')
-        
-        drop_value = all_observed_values_val.shape[0]%config['train']['batch_size']
-        
-        all_observed_values_val = tf.convert_to_tensor(all_observed_values_val[drop_value:])
-        all_observed_masks_val = tf.convert_to_tensor(all_observed_masks_val[drop_value:])
-        all_gt_masks_val = tf.convert_to_tensor(all_gt_masks_val[drop_value:])
-        all_timepoints_val = tf.convert_to_tensor(all_timepoints_val[drop_value:])
-       
-
-        #testing
-        all_observed_values_test = np.load('all_observed_values_test.npy')
-        all_observed_masks_test = np.load('all_observed_masks_test.npy')
-        all_gt_masks_test = np.load('all_gt_masks_test.npy')
-        all_timepoints_test = np.load('all_timepoints_test.npy')
-        
-        drop_value = all_observed_values_test.shape[0]%config['train']['batch_size']
-        
-        all_observed_values_test = tf.convert_to_tensor(all_observed_values_test[drop_value:])
-        all_observed_masks_test = tf.convert_to_tensor(all_observed_masks_test[drop_value:])
-        all_gt_masks_test = tf.convert_to_tensor(all_gt_masks_test[drop_value:])
-        all_timepoints_test = tf.convert_to_tensor(all_timepoints_test[drop_value:])
-
-        
-        train_loader = (all_observed_values_train,all_observed_masks_train,all_gt_masks_train,all_timepoints_train)
-        val_loader = (all_observed_values_val,all_observed_masks_val,all_gt_masks_val,all_timepoints_val)
-        test_loader = (all_observed_values_test,all_observed_masks_test,all_gt_masks_test,all_timepoints_test)
-        
-       
-       
-
-
-        #train_loader = get_dataloader_train_impute(series=training_data,
-        #                                           len_dataset=training_data.shape[1],
-                                                   # batch_size=config["train"]["batch_size"],
-                                                   # missing_ratio_or_k=config["model"]["missing_ratio_or_k"],
-                                                   # masking=config['model']['masking'],
-                                                   # path_save=config['train']['path_save'])
+        train_loader = get_dataloader_train_impute(series=training_data,
+                                                   len_dataset=training_data.shape[1],
+                                                    batch_size=config["train"]["batch_size"],
+                                                    missing_ratio_or_k=config["model"]["missing_ratio_or_k"],
+                                                    masking=config['model']['masking'],
+                                                    path_save=config['train']['path_save'])
                             
                             
-      #  val_loader = get_dataloader_train_impute(series=validation_data,
-                                                 # len_dataset=validation_data.shape[1],
-                                                 #   batch_size=config["train"]["batch_size"],
-                                                 #  missing_ratio_or_k=config["model"]["missing_ratio_or_k"],
-                                                 #   masking=config['model']['masking'],
-                                                 #   path_save=config['train']['path_save'])
+        val_loader = get_dataloader_train_impute(series=validation_data,
+                                                  len_dataset=validation_data.shape[1],
+                                                    batch_size=config["train"]["batch_size"],
+                                                   missing_ratio_or_k=config["model"]["missing_ratio_or_k"],
+                                                    masking=config['model']['masking'],
+                                                    path_save=config['train']['path_save'])
         
         
         
-       # test_loader = get_dataloader_train_impute(series=testing_data,
-                                                 #  len_dataset=testing_data.shape[1],
-                                                 #   batch_size=config["train"]["batch_size"],
-                                                  #  missing_ratio_or_k=config["model"]["missing_ratio_or_k"],
-                                                  #  masking=config['model']['masking'],
-                                                  #  path_save=config['train']['path_save'])
+        test_loader = get_dataloader_train_impute(series=testing_data,
+                                                   len_dataset=testing_data.shape[1],
+                                                    batch_size=config["train"]["batch_size"],
+                                                    missing_ratio_or_k=config["model"]["missing_ratio_or_k"],
+                                                    masking=config['model']['masking'],
+                                                    path_save=config['train']['path_save'])
         print('finish data processing')
     
     
