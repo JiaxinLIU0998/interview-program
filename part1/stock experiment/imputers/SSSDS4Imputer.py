@@ -32,7 +32,7 @@ class Residual_block(tf.keras.Model):
                           bidirectional=s4_bidirectional,
                           layer_norm=s4_layernorm)
 
-       # self.conv_layer = tf.keras.layers.Conv1D(filters=2 * self.res_channels, kernel_size=3, padding = 'SAME',use_bias=False, kernel_initializer='he_normal', data_format='channels_first')
+      
         self.conv_layer = tf.keras.layers.Conv1D(filters=2 * self.res_channels, kernel_size=3, padding = 'SAME', kernel_initializer='he_normal', data_format='channels_first')
 
         self.S42 = S4Layer(features=2*self.res_channels, 
@@ -43,11 +43,7 @@ class Residual_block(tf.keras.Model):
                           layer_norm=s4_layernorm)
 
 
-       # self.cond_conv = tf.keras.layers.Conv1D(filters=2*self.res_channels, kernel_size=1, padding = 'SAME',use_bias=False, kernel_initializer='he_normal', data_format='channels_first')
- 
-       # self.res_conv1 = tf.keras.layers.Conv1D(filters=res_channels, kernel_size=1, padding = 'SAME',use_bias=False, kernel_initializer='he_normal', data_format='channels_first')
-       # self.res_conv2 = tf.keras.layers.Conv1D(filters=skip_channels, kernel_size=1, padding = 'SAME',use_bias=False, kernel_initializer='he_normal', data_format='channels_first')
-        
+   
         self.cond_conv = tf.keras.layers.Conv1D(filters=2*self.res_channels, kernel_size=1, padding = 'SAME',kernel_initializer='he_normal', data_format='channels_first')
  
         self.res_conv1 = tf.keras.layers.Conv1D(filters=res_channels, kernel_size=1, padding = 'SAME',kernel_initializer='he_normal', data_format='channels_first')
@@ -176,7 +172,7 @@ class SSSDS4Imputer(tf.keras.Model):
         
        
         # convert the dimension of input from (B,in_channels,L) to (B,res_channels,L)
-       # self.init_conv = tf.keras.layers.Conv1D(filters=res_channels, kernel_size=1, padding = 'SAME',use_bias=False, kernel_initializer='he_normal', data_format='channels_first')
+
         self.init_conv = tf.keras.layers.Conv1D(filters=res_channels, kernel_size=1, padding = 'SAME', kernel_initializer='he_normal', data_format='channels_first')
         self.res_channels = res_channels
         self.skip_channels = skip_channels
@@ -196,17 +192,16 @@ class SSSDS4Imputer(tf.keras.Model):
                                              s4_layernorm=s4_layernorm)
         # convert the dimension from (B,skip_channels,L) to (B,out_channels,L)
         self.final_conv = tf.keras.Sequential()
-        #self.final_conv.add(tf.keras.layers.Conv1D(filters=skip_channels, kernel_size=1, padding = 'SAME',use_bias=False, kernel_initializer='he_normal', data_format='channels_first'))
+     
         self.final_conv.add(tf.keras.layers.Conv1D(filters=skip_channels, kernel_size=1, padding = 'SAME', kernel_initializer='he_normal', data_format='channels_first'))
         
         self.final_conv.add(tf.keras.layers.ReLU()) 
-        #self.final_conv.add(tf.keras.layers.Conv1D(filters=out_channels, kernel_size=1, padding = 'SAME', use_bias=False, kernel_initializer='zeros',data_format='channels_first'))
+      
         self.final_conv.add(tf.keras.layers.Conv1D(filters=out_channels, kernel_size=1, padding = 'SAME', kernel_initializer='zeros',data_format='channels_first'))
         
         
     
 
-    #@tf.Module.with_name_scope
     def call(self, input_data):
         """Pass to SSSDS4Imputer.
         Args:
