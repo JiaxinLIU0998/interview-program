@@ -20,7 +20,7 @@ CSDI_model.train(
     epochs = 100,
     samples_generate = 10,
     path_save = "./results/train_ptbxl_248/CSDIS4/",
-    batch_size = 16,
+    batch_size = 8,
     lr = 1.0e-3,
     layers = 4,
     channels = 64,
