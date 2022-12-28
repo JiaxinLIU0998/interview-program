@@ -19,7 +19,7 @@ CSDI_model.train(
     testset_path = './datasets/test_ptbxl_248.npy',
     epochs = 200,
     samples_generate = 10,
-    path_save = "/home/root/jpm/SSSD/tf/upload_CSDIS4/results/train_ptbxl_248/CSDI/",
+    path_save = "./results/train_ptbxl_248/CSDIS4/",
     batch_size = 2,
     lr = 1.0e-3,
     layers = 4,
