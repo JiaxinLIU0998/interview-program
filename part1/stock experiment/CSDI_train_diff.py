@@ -35,5 +35,4 @@ CSDI_model.train(
     featureemb = 16,
     missing_ratio = 0.3,
     mean_std_path = './datasets/diff/diff_mean_std.pickle',
-    lmax = 248,
     diff = True,)
