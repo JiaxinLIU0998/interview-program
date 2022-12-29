@@ -5,6 +5,7 @@ from datetime import timedelta
 import numpy as np
 from sklearn import preprocessing
 import warnings 
+import sys
 warnings.filterwarnings('ignore')
 
 
@@ -285,4 +286,4 @@ if __name__ == "__main__":
     for index_name in ['DJ30','EU50','HSI']:
         if not os.path.exists('./datasets/'+index_name):
             os.makedirs('./datasets/'+index_name) 
-        generate(index_name = index_name,data_path='./datasets/'+index_name,time_stamp=30)
+        generate(index_name = index_name,data_path='./datasets/'+index_name,time_stamp=sys.argv[1])
