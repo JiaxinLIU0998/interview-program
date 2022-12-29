@@ -1457,7 +1457,7 @@ def get_dataloader_train_impute(series,
 
 
 class CSDIImputer:
-    def __init__(self,gpu):
+    def __init__(self):
         np.random.seed(0)
         random.seed(0)
         gpus = tf.config.list_physical_devices(device_type='GPU')
