@@ -15,7 +15,6 @@ from imputers.transformerencoder import EncoderLayer as transformerencoder
 import opt_einsum as oe
 contract = oe.contract
 contract_expression = oe.contract_expression
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 
