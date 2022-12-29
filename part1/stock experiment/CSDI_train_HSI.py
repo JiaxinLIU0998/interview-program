@@ -35,4 +35,3 @@ CSDI_model.train(
     featureemb = 16,
     missing_ratio = 0.3,
     mean_std_path = './datasets/HSI/HSI_mean_std.pickle',)
-    mean_std_path = './datasets/HSI/HSI_mean_std.pickle',)
