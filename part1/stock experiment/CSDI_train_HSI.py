@@ -8,7 +8,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 
 
-CSDI_model = CSDIImputer(3)
+CSDI_model = CSDIImputer()
 
 CSDI_model.train(
     index = 'HSI',
@@ -34,4 +34,5 @@ CSDI_model.train(
     timeemb = 128,
     featureemb = 16,
     missing_ratio = 0.3,
+    mean_std_path = './datasets/HSI/HSI_mean_std.pickle',)
     mean_std_path = './datasets/HSI/HSI_mean_std.pickle',)
