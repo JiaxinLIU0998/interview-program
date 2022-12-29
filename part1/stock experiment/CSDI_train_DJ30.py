@@ -1,5 +1,5 @@
 import numpy as np
-from imputers.CSDIevaluate import CSDIImputer
+from imputers.CSDI import CSDIImputer
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
@@ -8,7 +8,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 
-CSDI_model = CSDIImputer(0)
+CSDI_model = CSDIImputer()
 
 CSDI_model.train(
     index = 'DJ30',
@@ -17,7 +17,7 @@ CSDI_model.train(
     testset_path = './datasets/DJ30/DJ30_test.npy',
     mask_path =  './datasets/DJ30/DJ30_mask_train.npy',
     mask_test_path = './datasets/DJ30/DJ30_mask_test.npy',
-    epochs = 10000,
+    epochs = 500,
     samples_generate = 10,
     path_save =  './results/DJ30/CSDI/',
     batch_size = 16,
