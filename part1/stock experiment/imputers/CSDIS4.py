@@ -1360,7 +1360,7 @@ class CSDI_base(tf.keras.Model):
     
 
 
-def get_dataloader_train_impute(series,batch_size,len_dataset,mask_template,missing_ratio):
+def get_dataloader_train_impute(series,batch_size,len_dataset,mask_template,missing_ratio,diff = False):
    
     count = 0
     series = np.reshape(np.repeat(np.expand_dims(series,0),5,0),[-1,series.shape[1],series.shape[2]])
@@ -1371,21 +1371,26 @@ def get_dataloader_train_impute(series,batch_size,len_dataset,mask_template,miss
     
     for sample in series:
         observed_values = np.nan_to_num(sample)
-        time_stamp = sample.shape[0]
-        num_of_tickers = sample.shape[1]
-        
         observed_masks = np.where(observed_values != 0, 1, 0)
-
-        template_num = np.random.randint(low = 0,high = mask_template.shape[0],size = 1)[0]
-        mask_imp = mask_template[template_num]
         
-        for i in range(mask_imp.shape[0]):
-            if (1- mask_imp[i].sum()/(time_stamp*num_of_tickers))<missing_ratio:
-                full_list = np.where(mask_imp[i][:,0]==1)[0]
-                index = random.sample(list(full_list),k=(mask_imp[i].sum()-time_stamp*num_of_tickers*(1-missing_ratio))//num_of_tickers)
-                mask_imp[i][index,:] = 0
+        if diff == True:
+            gt_masks = mask_template
+     
+        else:
+            
+            time_stamp = sample.shape[0]
+            num_of_tickers = sample.shape[1]
 
-        gt_masks = mask_imp * observed_masks
+            template_num = np.random.randint(low = 0,high = mask_template.shape[0],size = 1)[0]
+            mask_imp = mask_template[template_num]
+
+            for i in range(mask_imp.shape[0]):
+                if (1- mask_imp[i].sum()/(time_stamp*num_of_tickers))<missing_ratio:
+                    full_list = np.where(mask_imp[i][:,0]==1)[0]
+                    index = random.sample(list(full_list),k=(mask_imp[i].sum()-time_stamp*num_of_tickers*(1-missing_ratio))//num_of_tickers)
+                    mask_imp[i][index,:] = 0
+
+            gt_masks = mask_imp * observed_masks
       
         if count == 0:
             all_observed_values = observed_values
@@ -1407,14 +1412,17 @@ def get_dataloader_train_impute(series,batch_size,len_dataset,mask_template,miss
             tf.reshape(tf.convert_to_tensor(all_timepoints),(-1,sample.shape[0])))
 
 
-def get_dataloader_test_impute(series,len_dataset,mask_template_test):
+def get_dataloader_test_impute(series,len_dataset,mask_template_test,diff =False):
    
     count = 0
     
     for i,sample in enumerate(series):
         observed_values = np.nan_to_num(sample)
         observed_masks = np.where(observed_values  != 0, 1, 0)
-        gt_masks = mask_template_test[i]
+        if diff == True:
+            gt_masks = mask_template_test
+        else: 
+            gt_masks = mask_template_test[i]
         
       
         if count == 0:
@@ -1479,6 +1487,7 @@ class CSDIImputer:
               missing_ratio = 0.1,
               mean_std_path = './datasets/DJ30/DJ30_mean_std.pickle',
               lmax = 248,
+              diff = False
              ):
         
         '''
@@ -1573,20 +1582,23 @@ class CSDIImputer:
                                                    len_dataset=training_data.shape[1],
                                                     batch_size=config["train"]["batch_size"],
                                                    mask_template = mask_template,
-                                                  missing_ratio = missing_ratio)
+                                                  missing_ratio = missing_ratio,
+                                                  diff = diff)
                             
                             
         val_loader = get_dataloader_train_impute(series=validation_data,
                                                 len_dataset=validation_data.shape[1],
                                                 batch_size=config["train"]["batch_size"],
                                                 mask_template = mask_template,
-                                                missing_ratio = missing_ratio)
+                                                missing_ratio = missing_ratio,
+                                                diff = diff)
         
         
         
         test_loader = get_dataloader_test_impute(series=testing_data,
                                                    len_dataset=testing_data.shape[1],
-                                                    mask_template_test = mask_template_test)
+                                                    mask_template_test = mask_template_test,
+                                                diff = diff)
         
         print('finish data processing')
     
