@@ -8,7 +8,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 
 
-CSDI_model = CSDIImputer(3)
+CSDI_model = CSDIImputer()
 
 CSDI_model.train(
     index = 'EU50',
@@ -17,7 +17,7 @@ CSDI_model.train(
     testset_path = './datasets/EU50/EU50_test.npy',
     mask_path =  './datasets/EU50/EU50_mask_train.npy',
     mask_test_path = './datasets/EU50/EU50_mask_test.npy',
-    epochs = 10000,
+    epochs = 500,
     samples_generate = 10,
     path_save =  './results/EU50/CSDI/',
     batch_size = 16,
